@@ -1,0 +1,109 @@
+import matplotlib.pyplot as plt
+import re
+import pandas as pd
+from pyecharts import options as opts
+from pyecharts.charts import Line
+import jieba
+df = pd.read_csv('gov_reports.csv')
+df['year'] = df['file'].apply(lambda f: re.findall('\d{4}', f)[0])
+df['prov'] = df['file'].apply(lambda f: re.findall('/(.*?)/', f)[0])
+table_df = pd.pivot_table(df, columns='year', index='prov', values='text', aggfunc=lambda cs: ''.join(str(c) for c in cs))
+
+def keywords_frequency(cell, keywords):
+    try:
+        wcount = 0
+        words = jieba.lcut(cell)
+        for keyw in keywords:
+            wcount += words.count(keyw)
+        return wcount / len(words)
+    except:
+        return 0
+
+
+def plot_trends(df, keywords, title):
+    df2 = df.applymap(lambda cell: keywords_frequency(cell, keywords))
+    line_chart = Line()
+    line_chart.add_xaxis(xaxis_data=df2.columns.tolist())
+    for linename in df2.index:
+        linedata = df2.loc[linename].tolist()
+        line_chart.add_yaxis(series_name=linename,
+                             y_axis=linedata,
+                             label_opts=opts.LabelOpts(formatter="{b}",
+                                                       position="right",
+                                                       is_show=False))
+    line_chart.set_global_opts(
+        title_opts=opts.TitleOpts(title=title,
+                                  pos_top="5%",
+                                  pos_right='30%'),
+        xaxis_opts=opts.AxisOpts(name="Year"),
+        yaxis_opts=opts.AxisOpts(name="Value"),
+        legend_opts=opts.LegendOpts(pos_right=True, orient='vertical'),
+    )
+    return line_chart.render_notebook()
+
+
+selected_df = table_df.loc[['北京', '上海', '广东', '浙江'],:]
+keywords = ['人才']
+title = '各地政府年度工作报告人才词讨论趋势(1999-2021)',
+
+plot_trends(df=selected_df,
+            keywords=keywords,
+            title=title)
+
+# output_file = open('biden_split.txt', 'w+', encoding='utf8')
+# for line1 in open('biden_output.txt', 'r', encoding='utf8'):
+#     date = line1.split('\t')[0]
+#     str_all = line1.split('\t')[1]
+#     para = str_all.split(';;;;')
+#     for line in para:
+#         line = line.strip()
+#         output_str = date + '\t' + line + '\n'
+#         output_file.write(output_str)
+# output_file.close()
+
+
+
+#
+# biden_line = pd.read_csv('biden_line_new.csv', index_col=0)
+# texts = biden_line.iloc[:, 1]
+# dates = biden_line.iloc[:, 0]
+# biden_line.index = np.arange(len(biden_line))
+# trump_line = pd.read_csv('trump_line_new.csv', index_col=0)
+# trump_line.index = np.arange(len(trump_line))
+
+def line_transform(inputs):
+    dates = []
+    CAPS = []
+    texts = []
+    for i, line in enumerate(inputs):
+        if 'No Department Press Briefing' in line or 'Department Press Briefing' in line or 'No Briefing' in line or 'No Department Briefing' in line or 'NoDepartment Press Briefing' in line or 'No Department press briefing' in line:
+            pass
+        else:
+            # 如果line是大写的就用CAP变量记下来，后面的lower case都是关于CAP的
+            if line.isupper():
+                CAP = line
+            else:
+                # 这一段是处理超连接的，如果有超连接就把它接到上一个lower case text去
+                # 超链接不全，用'here<https://www'查找
+                if '<' in line and '>' in line and 'www.state.gov<http://www.state.gov/>.' in line or '2017-2021.state.gov<http://2017-2021.state.gov/>.' in line or 'www.youtube.com/statedept' in line.lower() or 'www.state.gov<http://www.state.gov>' in line or 'http://www.youtube.com/statedept' in line.lower() or 'here<https://www.state.gov/' in line:
+                    try:
+                        texts[-1] = texts[-1] + ' ' + line
+                        pass
+                    except:
+                        pass
+                else:
+                    # 如果line是lower case text，记录一行date，cap，text
+                    texts.append(line)
+                    dates.append(inputs.Dates[i])
+                    CAPS.append(CAP)
+    form = pd.DataFrame(dates, columns=['Dates'])
+    form['CAPS'] = CAPS
+    form['Texts'] = texts
+    return form
+#
+#
+# # def update():
+#     # A = line_transform(trump_line)
+#     # A.to_csv('Trump_Transformed_new.csv')
+# A = line_transform(biden_line)
+# A.to_csv('Biden_Transformed_new.csv')
